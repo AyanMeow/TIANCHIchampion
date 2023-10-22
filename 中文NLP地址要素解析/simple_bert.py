@@ -178,6 +178,7 @@ if __name__ == '__main__':
         learning_rate=1e-4,             # 学习率
         save_steps=500,               # 不保存检查点
     )
+    training_args.device
     trainer=ts.Trainer(model=classfier,
                     args=training_args,
                     train_dataset=train_datasets,
