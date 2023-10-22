@@ -125,8 +125,17 @@ class AddrTest(Dataset):
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
     logger.setLevel(level = logging.INFO)
-    logger.info('start load data')
     logging.getLogger().setLevel(logging.INFO)
+    
+    base_root='/home/xyy'
+    models_path='/models'
+    m_bert='/bert-base-chinese'
+    m_robert='/chinese-roberta-wwm-ext'
+    
+    m_use=base_root+models_path+m_bert
+    
+    logger.info('start load data')
+    
     logging.info('start load data')
     train_data=load_data('./datasets/')
     train_data=makedata(train_data)
@@ -138,7 +147,7 @@ if __name__ == '__main__':
     ldict=label2int(train_data['label']+val_data['label'])
     
     logger.info('initiate tokenlizer')
-    tokenizer=ts.AutoTokenizer.from_pretrained('bert-base-chinese',mirror='bfsu')
+    tokenizer=ts.AutoTokenizer.from_pretrained(m_use)
     
     logger.info('create datasets')
     train_datasets=Addr(train_data,tokenizer,ldict) 
@@ -146,7 +155,7 @@ if __name__ == '__main__':
     test_datasets=AddrTest(test_data,tokenizer)
 
     logger.info('load bert model')
-    classfier=ts.AutoModelForTokenClassification.from_pretrained('bert-base-chinese',num_labels=len(ldict),mirror='https://mirrors.tuna.tsinghua.edu.cn/hugging-face-models')
+    classfier=ts.AutoModelForTokenClassification.from_pretrained(m_use,num_labels=len(ldict))
     device=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     logger.info('use device ',device)
     classfier=classfier.to(device)
