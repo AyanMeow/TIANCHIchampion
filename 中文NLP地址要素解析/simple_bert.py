@@ -196,6 +196,7 @@ if __name__ == '__main__':
             optimizer.step()
         logger.info('epoch'+str(e)+'  loss:'+str(loss.item()))
         
+        
     logger.info('-----------start evaluting---------')
     accuracy=[]
     for step ,batch in enumerate(val_dl):
