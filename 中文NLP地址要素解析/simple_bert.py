@@ -5,6 +5,21 @@ import torch.optim as optim
 import transformers as ts
 from torch.utils.data import Dataset,DataLoader
 import logging
+import numpy as np
+from torchcrf import CRF
+import os
+
+class RoBERTa_CRF(nn.Module):
+    def __init__(self, bert_path,num_labels) -> None:
+        super(RoBERTa_CRF,self).__init__()
+        self.bert=ts.AutoModelForTokenClassification.from_pretrained(bert_path,num_labels=num_labels)
+        self.crf=CRF(num_tags=num_labels,batch_first=True)
+        
+    def forward(self,batch_data):
+        output=self.bert(**batch_data)
+        loss=-self.crf(output.logits,batch_data['labels'],batch_data['attention_mask'].bool())
+        out=self.crf.decode(output.logits,batch_data['attention_mask'].bool())
+        return out,loss
 
 def load_data(path,train=True):
     if train:
@@ -77,7 +92,7 @@ def label2int(labels):
 
 class Addr(Dataset):
     """docstring for Addr."""
-    def __init__(self,data,tokenizer,ldict):
+    def __init__(self,data,tokenizer,ldict,device):
         self.text=[]
         for t in data['text']:
             self.text.append(list(t[0]))
@@ -91,11 +106,12 @@ class Addr(Dataset):
                 label.append(0)
             labels.append(label)
         self.labels=labels
+        self.device=device
         
     def __getitem__(self, idx):
-        input_ids = torch.LongTensor(self.encodings['input_ids'][idx])
-        attention_mask = torch.LongTensor(self.encodings['attention_mask'][idx])
-        labels = torch.LongTensor(self.labels[idx])
+        input_ids = torch.LongTensor(self.encodings['input_ids'][idx]).to(self.device)
+        attention_mask = torch.LongTensor(self.encodings['attention_mask'][idx]).to(self.device)
+        labels = torch.LongTensor(self.labels[idx]).to(self.device)
         return {'input_ids': input_ids, 'attention_mask': attention_mask, 'labels': labels}
 
     def __len__(self):
@@ -111,18 +127,21 @@ def load_test_data(path):
     return texts
 
 class AddrTest(Dataset):
-    def __init__(self,data,tokenizer):
+    def __init__(self,data,tokenizer,device):
         self.text=data
         self.encodings=tokenizer(data,is_split_into_words=True,padding=True)
+        self.device=device
     def __len__(self):
         return len(self.text)
     def __getitem__(self, idx):
-        input_ids = torch.LongTensor(self.encodings['input_ids'][idx])
-        attention_mask = torch.LongTensor(self.encodings['attention_mask'][idx])
+        input_ids = torch.LongTensor(self.encodings['input_ids'][idx]).to(self.device)
+        attention_mask = torch.LongTensor(self.encodings['attention_mask'][idx]).to(self.device)
         return {'input_ids': input_ids, 'attention_mask': attention_mask}
     
 
 if __name__ == '__main__':
+    os.environ["CUDA_VISIBLE_DEVICES"]='1'
+    device=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     logger = logging.getLogger(__name__)
     logger.setLevel(level = logging.INFO)
     logging.getLogger().setLevel(logging.INFO)
@@ -132,7 +151,7 @@ if __name__ == '__main__':
     m_bert='/bert-base-chinese'
     m_robert='/chinese-roberta-wwm-ext'
     
-    m_use=base_root+models_path+m_bert
+    m_use=base_root+models_path+m_robert
     
     logger.info('start load data')
     
@@ -150,45 +169,49 @@ if __name__ == '__main__':
     tokenizer=ts.AutoTokenizer.from_pretrained(m_use)
     
     logger.info('create datasets')
-    train_datasets=Addr(train_data,tokenizer,ldict) 
-    val_datasets=Addr(val_data,tokenizer,ldict)
-    test_datasets=AddrTest(test_data,tokenizer)
+    train_datasets=Addr(train_data,tokenizer,ldict,device) 
+    val_datasets=Addr(val_data,tokenizer,ldict,device)
+    test_datasets=AddrTest(test_data,tokenizer,device)
 
     logger.info('load bert model')
-    classfier=ts.AutoModelForTokenClassification.from_pretrained(m_use,num_labels=len(ldict))
-    device=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    classfier=RoBERTa_CRF(m_use,len(ldict))
     logger.info('use device ',device)
     classfier=classfier.to(device)
     
+    epoch=500;
+    bs=128
     
-    def compute_metrics(pred):
-        labels = pred.label_ids
-        preds = pred.predictions.argmax(-1)
-        acc = (labels == preds).sum()/len(labels)
-        return {
-            'accuracy': acc,
-        }
+    train_dl=DataLoader(train_datasets,batch_size=bs)
+    val_dl=DataLoader(val_datasets,batch_size=bs)
+    
+    logger.info('-----------start training---------')
+    params=classfier.parameters()
+    optimizer=torch.optim.Adam(params=params,lr=5e-5)
+    classfier.train()
+    for e in range(0,epoch):
+        for step,batch in enumerate(train_dl):
+            out,loss=classfier(batch)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        logger.info('epoch'+str(e)+'  loss:'+str(loss.item()))
         
-    training_args = ts.TrainingArguments(
-        output_dir='./results',         # output directory 结果输出地址
-        num_train_epochs=1,             # total # of training epochs 训练总批次
-        per_device_train_batch_size=64,  # batch size per device during training 训练批大小
-        per_device_eval_batch_size=64,   # batch size for evaluation 评估批大小
-        logging_dir='./logs/',    # directory for storing logs 日志存储位置
-        learning_rate=1e-4,             # 学习率
-        save_steps=500,               # 不保存检查点
-    )
-    training_args.device
-    trainer=ts.Trainer(model=classfier,
-                    args=training_args,
-                    train_dataset=train_datasets,
-                    eval_dataset=val_datasets,
-                    compute_metrics=compute_metrics,
-                    tokenizer=None)
-    logger.info('start training')
-    trainer.train()
-    logger.info('start evaluating')
-    trainer.evaluate()
-    trainer.save_model()
-    logger.info('trained model saved')
-    #preds=trainer.predict(test_dataset=test_datasets)
+    logger.info('-----------start evaluting---------')
+    accuracy=[]
+    for step ,batch in enumerate(val_dl):
+        with torch.no_grad():
+            out,loss=classfier(batch)
+        labels=batch['labels'].tolist()
+        acc=[]
+        for logits,label in zip(out,labels):
+            lo=np.array(logits)
+            la=np.array(label)
+            lo=np.pad(lo,(0,la.shape[0]-lo.shape[0]))
+            acc.append((lo==la).sum()/la.shape[0])
+        accuracy.append(np.mean(acc))
+    accuracy=np.mean(accuracy)
+    
+    logger.info('accuracy:'+str(accuracy)+'   loss:'+str(loss.item()))
+    
+    torch.save(classfier.state_dict(),'./roberta_crf.pth')
+    logger.info('-----------model state saved---------')
