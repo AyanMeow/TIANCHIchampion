@@ -12,13 +12,27 @@ import os
 class RoBERTa_CRF(nn.Module):
     def __init__(self, bert_path,num_labels) -> None:
         super(RoBERTa_CRF,self).__init__()
-        self.bert=ts.AutoModelForTokenClassification.from_pretrained(bert_path,num_labels=num_labels)
+        self.bcfig=ts.BertConfig.from_pretrained(bert_path)
+        self.bert=ts.BertModel.from_pretrained(bert_path,config=self.bcfig)
+        self.lstm=nn.LSTM(input_size=self.bcfig.hidden_size,
+                          hidden_size=self.bcfig.hidden_size,
+                          batch_first=True,
+                          bidirectional=False)
+        self.mlp=nn.Sequential(
+            nn.Linear(in_features=self.bcfig.hidden_size,
+                      out_features=int(np.ceil(self.bcfig.hidden_size/2)),),
+            nn.GELU(),
+            nn.Linear(in_features=int(np.ceil(self.bcfig.hidden_size/2)),
+                      out_features=num_labels)
+        )
         self.crf=CRF(num_tags=num_labels,batch_first=True)
         
     def forward(self,batch_data):
-        output=self.bert(**batch_data)
-        loss=-self.crf(output.logits,batch_data['labels'],batch_data['attention_mask'].bool())
-        out=self.crf.decode(output.logits,batch_data['attention_mask'].bool())
+        output=self.bert(batch_data['input_ids'],batch_data['attention_mask'])
+        output=self.lstm(output.last_hidden_state)
+        output=self.mlp(output[0])
+        loss=-self.crf(output,batch_data['labels'],batch_data['attention_mask'].bool())
+        out=self.crf.decode(output,batch_data['attention_mask'].bool())
         return out,loss
 
 def load_data(path,train=True):
