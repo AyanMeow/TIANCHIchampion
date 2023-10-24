@@ -9,6 +9,7 @@ import numpy as np
 from torchcrf import CRF
 import os
 
+
 class RoBERTa_CRF(nn.Module):
     def __init__(self, bert_path,num_labels) -> None:
         super(RoBERTa_CRF,self).__init__()
