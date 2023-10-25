@@ -105,7 +105,7 @@ if __name__ == '__main__':
                 out,loss=model(batch)
             indexs = batch['input_ids'].tolist()[0].index(102)
             sentence = tokenizer.decode(batch['input_ids'][0][1:indexs]).replace(" ","")
-            line=create_line(step+1,sentence,out[0])
+            line=create_line(step+1,test_data[0],out[0])
             print(line)
             file.write(line+'\n')
         file.close()

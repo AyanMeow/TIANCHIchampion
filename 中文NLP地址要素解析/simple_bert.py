@@ -17,8 +17,10 @@ class RoBERTa_CRF(nn.Module):
         self.bert=ts.BertModel.from_pretrained(bert_path,config=self.bcfig)
         self.lstm=nn.LSTM(input_size=self.bcfig.hidden_size,
                           hidden_size=self.bcfig.hidden_size,
+                          num_layers=8,
                           batch_first=True,
-                          bidirectional=False)
+                          bidirectional=False,
+                          dropout=0.4)
         self.mlp=nn.Sequential(
             nn.Linear(in_features=self.bcfig.hidden_size,
                       out_features=int(np.ceil(self.bcfig.hidden_size/2)),),
@@ -201,7 +203,7 @@ if __name__ == '__main__':
     
     logger.info('-----------start training---------')
     params=classfier.parameters()
-    optimizer=torch.optim.Adam(params=params,lr=5e-5)
+    optimizer=torch.optim.Adam(params=params,lr=3e-5)
     classfier.train()
     for e in range(0,epoch):
         for step,batch in enumerate(train_dl):
