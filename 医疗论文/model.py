@@ -11,8 +11,12 @@ class GlobalPointer(nn.Module):
 
         self.args = args
         bert_config = BertConfig.from_pretrained(self.args['bert_dir'] + '/config.json')
+        bert_config.output_hidden_states=True
         self.encoder = BertModel.from_pretrained(self.args['bert_dir'], config=bert_config)
-
+        self.bilstm = None
+        if args['use_bilstm']:
+            self.bilstm=nn.LSTM(self.encoder.config.hidden_size,self.encoder.config.hidden_size//2,num_layers=1,
+                                batch_first=True,bidirectional=True)
 
         self.ent_type_size = ent_type_size
         self.inner_dim = inner_dim
@@ -37,8 +41,13 @@ class GlobalPointer(nn.Module):
         self.device = input_ids.device
 
         context_outputs = self.encoder(input_ids, attention_mask, token_type_ids)
-        last_hidden_state = context_outputs[0]
-
+        if self.args['last_4_bert']:
+            last_hidden_state=torch.stack(context_outputs['hidden_states'][-4:],dim=-1).mean(-1)
+        else:
+            last_hidden_state = context_outputs[0]
+        if self.bilstm:
+            last_hidden_state,(cell,_)=self.bilstm(last_hidden_state)
+            
         batch_size = last_hidden_state.size()[0]
         seq_len = last_hidden_state.size()[1]
 

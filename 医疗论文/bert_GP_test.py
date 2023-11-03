@@ -45,7 +45,7 @@ def main():
     print('load data')
     logging.info('load data')
     
-    train_data=pd.read_json('./datasets/ptrain.json')
+    train_data=pd.read_json('./datasets/title_train.json')
     train_set,val_set=train_test_split(train_data,test_size=0.2,random_state=1234)
     train_set=train_set.reset_index(drop=True)
     val_set=val_set.reset_index(drop=True)
@@ -61,7 +61,7 @@ def main():
     logging.info('load tokenizer')
     
     tokenizer=ts.BertTokenizer.from_pretrained(model_rope)
-    ttokenier=Tokenizer(vocab=tokenizer,max_seq_len=256)
+    ttokenier=Tokenizer(vocab=tokenizer,max_seq_len=200)
     
     trainds.convert_to_ids(ttokenier)
     valds.convert_to_ids(ttokenier)
@@ -69,18 +69,20 @@ def main():
     print('load model')
     logging.info('load model')
     args={
-        'bert_dir':model_rope
+        'bert_dir':model_rope,
+        'last_4_bert':True,
+        'use_bilstm':True
     }
     bertModel=GlobalPointer(args,len(label_list),64).to(device)
 
-    traindl=DataLoader(trainds.dataset,batch_size=32)
+    traindl=DataLoader(trainds.dataset,batch_size=64)
      
     opt=torch.optim.Adam(bertModel.parameters(),lr=5e-5)
     loss_fn=GlobalPointerCrossEntropy()
     
     print('strat_training')
     logging.info('strat_training')
-    epoch=50   
+    epoch=100   
     best_score=1
     for e in range(0,epoch):
         train_loss=0
@@ -99,7 +101,7 @@ def main():
         
         if tloss < best_score:
             best_score=tloss
-            torch.save(bertModel.state_dict(),'./title_best.pth')
+            torch.save(bertModel.state_dict(),'./title_best(lstm).pth')
             print('---------save best model')
             logging.info('---------save best model')
     

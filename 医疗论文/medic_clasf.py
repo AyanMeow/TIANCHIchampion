@@ -57,21 +57,24 @@ class clf(nn.Module):
     
 
 class medData(Dataset):
-    def __init__(self,texts,labels,tokenizer,maxlen,label_list) -> None:
+    def __init__(self,texts,labels,tokenizer,maxlen,label_list,device) -> None:
         super(medData,self).__init__()
         self.text=[tokenizer(t,
                             padding='max_length',
                             max_length = maxlen) for t in texts]
         self.labels=[label_list.index(l) for l in labels]
+        self.labels=nn.functional.one_hot(torch.tensor(self.labels))
+        self.device=device
         
     def __len__(self):
         return len(self.text)
     
     def __getitem__(self, index):
-        input_ids=torch.LongTensor(self.text[index]['input_ids'])
-        attention_mask=torch.LongTensor(self.text[index]['attention_mask'])
-        token_type_ids=torch.LongTensor(self.text[index]['token_type_ids'])
-        label=torch.tensor([self.labels[index]],dtype=torch.float32)
+        input_ids=torch.LongTensor(self.text[index]['input_ids']).to(self.device)
+        attention_mask=torch.LongTensor(self.text[index]['attention_mask']).to(self.device)
+        token_type_ids=torch.LongTensor(self.text[index]['token_type_ids']).to(self.device)
+        label=torch.tensor(self.labels[index],dtype=torch.float).to(self.device)
+        
         return {'input_ids':input_ids,'attention_mask':attention_mask,'token_type_ids':token_type_ids},label
     
 def main():
@@ -85,11 +88,13 @@ def main():
     
     logging.info('load data')
     ctrain_df=pd.read_json('./datasets/context_title_train.json')
-    ctrain_dataset=medData(ctrain_df['text'].__array__(),ctrain_df['label'].__array__(),tokenizer,200,label_list)
-    ctrain_dl=DataLoader(ctrain_dataset,batch_size=64)
+    ctrain_dataset=medData(ctrain_df['text'].__array__(),ctrain_df['label'].__array__(),tokenizer,200,label_list,device)
+    ctrain_dl=DataLoader(ctrain_dataset,batch_size=32)
     
     logging.info('load bert model')
-    classfier=clf(m_path,cat_num=len(label_list)).to(device)
+    #classfier=clf(m_path,cat_num=len(label_list)).to(device)
+    bcfg=ts.BertConfig.from_pretrained(m_path,num_labels=len(label_list))
+    classfier=ts.BertForSequenceClassification.from_pretrained(m_path,config=bcfg,ignore_mismatched_sizes=True).to(device)
     
     logging.info('init training')
     epoch=200
@@ -101,13 +106,16 @@ def main():
     for e in range(0,epoch):
         train_loss=0
         for step,(bd,l) in enumerate(ctrain_dl):
-            logits=classfier(bd['input_ids'].to(device),
-                             bd['attention_mask'].to(device),
-                             bd['token_type_ids'].to(device))
-            pred,_=torch.max(logits,dim=-1)
-            pred=pred.view(-1)
-            l=l.view(-1).to(device)
-            loss=loss_fn(pred,l)
+            # logits=classfier(bd['input_ids'].to(device),
+            #                  bd['attention_mask'].to(device),
+            #                  bd['token_type_ids'].to(device))
+            # pred,_=torch.max(logits,dim=-1)
+            # pred=pred.view(-1)
+            # l=l.view(-1).to(device)
+            # loss=loss_fn(pred,l)
+            # train_loss+=loss.item()
+            output=classfier(**bd,labels=l)
+            loss=output['loss']
             train_loss+=loss.item()
             
             opt.zero_grad()
