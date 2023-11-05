@@ -43,15 +43,19 @@ class clf(nn.Module):
         super(clf, self).__init__()
         bcfg=ts.BertConfig.from_pretrained(bert_path)
         self.bert=ts.BertModel.from_pretrained(bert_path,config=bcfg)
+        self.lstm=nn.LSTM(self.bert.config.hidden_size,self.bert.config.hidden_size//2,num_layers=1,
+                                batch_first=True,bidirectional=True)
+        self.dropout=nn.Dropout(p=0.5)
         self.mlp=nn.Sequential(
-            nn.Dropout(p=0.5),
-            nn.Linear(768,cat_num),
-            nn.GELU(),
+            nn.Linear(self.bert.config.hidden_size,cat_num),
+            nn.GELU()
         )
         
     def forward(self,input_ids,attention_mask,token_type_ids):
         last_hidden_state=self.bert(input_ids,attention_mask,token_type_ids)
         logits=last_hidden_state[0][:,0,:]
+        logits=self.dropout(logits)
+        logits,(cell,_)=self.lstm(logits)
         logits=self.mlp(logits)
         return logits
     
@@ -84,6 +88,7 @@ def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     logging.info('load tokenizer')
     m_path='/home/xyy/models/macbert-base-chinese-medical-collation'
+    #m_path='E:/自然语言处理/model/macbert-base-chinese-medical-collation'
     tokenizer=ts.BertTokenizer.from_pretrained(m_path)
     
     logging.info('load data')
@@ -92,13 +97,13 @@ def main():
     ctrain_dl=DataLoader(ctrain_dataset,batch_size=32)
     
     logging.info('load bert model')
-    #classfier=clf(m_path,cat_num=len(label_list)).to(device)
-    bcfg=ts.BertConfig.from_pretrained(m_path,num_labels=len(label_list))
-    classfier=ts.BertForSequenceClassification.from_pretrained(m_path,config=bcfg,ignore_mismatched_sizes=True).to(device)
+    classfier=clf(m_path,cat_num=len(label_list)).to(device)
+    #bcfg=ts.BertConfig.from_pretrained(m_path,num_labels=len(label_list))
+    #classfier=ts.BertForSequenceClassification.from_pretrained(m_path,config=bcfg,ignore_mismatched_sizes=True).to(device)
     
     logging.info('init training')
-    epoch=200
-    opt=torch.optim.Adam(classfier.parameters(),lr=5e-5)
+    epoch=500
+    opt=torch.optim.Adam(classfier.parameters(),lr=1e-5)
     loss_fn=torch.nn.CrossEntropyLoss()
     best_score=1
     logging.info('start training')
@@ -106,17 +111,14 @@ def main():
     for e in range(0,epoch):
         train_loss=0
         for step,(bd,l) in enumerate(ctrain_dl):
-            # logits=classfier(bd['input_ids'].to(device),
-            #                  bd['attention_mask'].to(device),
-            #                  bd['token_type_ids'].to(device))
-            # pred,_=torch.max(logits,dim=-1)
-            # pred=pred.view(-1)
-            # l=l.view(-1).to(device)
-            # loss=loss_fn(pred,l)
-            # train_loss+=loss.item()
-            output=classfier(**bd,labels=l)
-            loss=output['loss']
+            logits=classfier(bd['input_ids'],
+                             bd['attention_mask'],
+                             bd['token_type_ids'])
+            loss=loss_fn(logits,l)
             train_loss+=loss.item()
+            # output=classfier(**bd,labels=l)
+            # loss=output['loss']
+            # train_loss+=loss.item()
             
             opt.zero_grad()
             loss.backward()
