@@ -11,6 +11,8 @@ from model import GlobalPointer,GlobalPointerCrossEntropy,GlobalPointerNERPredic
 from torch.utils.data import DataLoader
 import os
 import logging
+from tricks import EMA,PGD
+
 label_list=['C-对比选项',
  'C-研究方法',
  'C-研究目的',
@@ -42,7 +44,6 @@ def main():
     
     device=torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     
-    print('load data')
     logging.info('load data')
     
     train_data=pd.read_json('./datasets/title_train.json')
@@ -57,7 +58,6 @@ def main():
     
     model_rope='/home/xyy/models/macbert-base-chinese-medical-collation'
     
-    print('load tokenizer')
     logging.info('load tokenizer')
     
     tokenizer=ts.BertTokenizer.from_pretrained(model_rope)
@@ -66,7 +66,6 @@ def main():
     trainds.convert_to_ids(ttokenier)
     valds.convert_to_ids(ttokenier)
     
-    print('load model')
     logging.info('load model')
     args={
         'bert_dir':model_rope,
@@ -76,13 +75,19 @@ def main():
     bertModel=GlobalPointer(args,len(label_list),64).to(device)
 
     traindl=DataLoader(trainds.dataset,batch_size=64)
+    valdl=DataLoader(valds.dataset,batch_size=64)
      
-    opt=torch.optim.Adam(bertModel.parameters(),lr=5e-5)
+    opt=torch.optim.Adam(bertModel.parameters(),lr=4e-5)
     loss_fn=GlobalPointerCrossEntropy()
     
-    print('strat_training')
+    pgd=PGD(model=bertModel)
+    K=3
+    
+    ema=EMA(model=bertModel,decay=0.999)
+    ema.register()
+    
     logging.info('strat_training')
-    epoch=100   
+    epoch=300   
     best_score=1
     for e in range(0,epoch):
         train_loss=0
@@ -93,19 +98,44 @@ def main():
             
             opt.zero_grad()
             loss.backward()
+            
+            
+            token_id=bd['input_ids']
+            at_mask=bd['attention_mask']
+            token_type_ids=bd['token_type_ids']
+            label_id=bd['label_ids']
+            pgd.backup_grad()
+            for t in range(K):
+                pgd.attack(is_first_attack=(t == 0))
+                if t != K - 1:
+                    bertModel.zero_grad()
+                else:
+                    pgd.restore_grad()
+                    
+                outputs = bertModel(token_id.to(device), at_mask.to(device), token_type_ids.to(device))
+                loss_pgd = loss_fn(outputs, label_id.to(device).to_dense()).mean()
+                loss_pgd.backward()
+            pgd.restore()
+            
             opt.step()
+            
+            ema.update()
         
         tloss=train_loss/step
-        print('epoch:',e,'  loss:',tloss)
         logging.info('epoch:'+str(e)+'  loss:'+str(tloss))
         
-        if tloss < best_score:
-            best_score=tloss
+        with torch.no_grad():
+            vloss=0
+            for vstep,bd in enumerate(valdl):
+                vlogits=bertModel(bd['input_ids'].to(device),bd['attention_mask'].to(device),bd['token_type_ids'].to(device))
+                vloss+=loss_fn(vlogits,bd['label_ids'].to(device).to_dense()).item()
+            vloss=vloss/vstep
+        logging.info('epoch:'+str(e)+'  vloss:'+str(vloss))
+        if vloss < best_score:
+            best_score=vloss
             torch.save(bertModel.state_dict(),'./title_best(lstm).pth')
-            print('---------save best model')
             logging.info('---------save best model')
     
-    print('try_preding')
     logging.info('try_preding')
     
     test_text='常染色体显性多囊肾病的临床问题及其肾脏替代治疗的选择'
@@ -114,7 +144,6 @@ def main():
     
     result=mpred.predict_one_sample(test_text)
     
-    print('pred:',result)
     logging.info('----------pred:'+str(result))
     
     
