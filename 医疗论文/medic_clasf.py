@@ -13,29 +13,14 @@ import os
 import logging
 import torch.nn as nn
 
-label_list=['C-对比选项',
- 'C-研究方法',
- 'C-研究目的',
- 'I-其他干预',
- 'I-干预',
- 'I-教育/行为干预',
- 'I-药物干预',
- 'I-非药物干预',
- 'O-定性结论',
- 'O-定量结论',
- 'O-结论',
- 'O-结论主语',
- 'P-人群/患者类型',
- 'P-条件',
- 'P-研究对象',
- 'P-评估项',
- 'S-因素(病因/风险)分析',
- 'S-指南标准建议',
- 'S-治疗',
- 'S-病因学',
- 'S-统计分析',
- 'S-诊断',
- 'S-预后']
+label_lists={
+    'big':['C','I','O','P','S'],
+    'C':['对比选项','研究方法','研究目的',],
+    'I':['其他干预','干预','教育/行为干预','药物干预','非药物干预',],
+    'O':['定性结论','定量结论','结论','结论主语',],
+    'P':['人群/患者类型','条件','研究对象','评估项',],
+    'S':['因素(病因/风险)分析','指南标准建议','治疗','病因学','统计分析','诊断','预后']
+}
 
 class clf(nn.Module):
     """docstring for clf."""
@@ -81,9 +66,11 @@ class medData(Dataset):
         
         return {'input_ids':input_ids,'attention_mask':attention_mask,'token_type_ids':token_type_ids},label
     
-def main():
+def main(small_cat='P'):
     #os.environ["CUDA_VISIBLE_DEVICES"]='0,1,2'
     logging.getLogger().setLevel(logging.INFO)
+    label_list=label_lists[small_cat]
+    logging.info('-'*10+'now train:'+small_cat+'-'*10)
     
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     logging.info('load tokenizer')
@@ -92,7 +79,7 @@ def main():
     tokenizer=ts.BertTokenizer.from_pretrained(m_path)
     
     logging.info('load data')
-    ctrain_df=pd.read_json('./datasets/context_title_train.json')
+    ctrain_df=pd.read_json('./datasets/hierarchical/'+small_cat+'cat_train.json')
     ctrain_dataset=medData(ctrain_df['text'].__array__(),ctrain_df['label'].__array__(),tokenizer,200,label_list,device)
     ctrain_dl=DataLoader(ctrain_dataset,batch_size=32)
     
@@ -102,8 +89,8 @@ def main():
     #classfier=ts.BertForSequenceClassification.from_pretrained(m_path,config=bcfg,ignore_mismatched_sizes=True).to(device)
     
     logging.info('init training')
-    epoch=500
-    opt=torch.optim.Adam(classfier.parameters(),lr=1e-5)
+    epoch=200
+    opt=torch.optim.Adam(classfier.parameters(),lr=4e-5)
     loss_fn=torch.nn.CrossEntropyLoss()
     best_score=1
     logging.info('start training')
@@ -129,9 +116,17 @@ def main():
         
         if train_loss < best_score:
             best_score=train_loss
-            torch.save(classfier.state_dict(),'./best_classfier.pth')
+            torch.save(classfier.state_dict(),'./hierarchical/'+small_cat+'classfier.pth')
             logging.info('-----------best model saved')
+
+    del loss
+    del logits
+    del bd
+    del l
+    del classfier
+    torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
-    main()
+    for key in label_lists.keys():
+        main(small_cat=key)

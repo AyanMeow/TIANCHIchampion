@@ -13,29 +13,7 @@ import os
 import logging
 from tricks import EMA,PGD
 
-label_list=['C-对比选项',
- 'C-研究方法',
- 'C-研究目的',
- 'I-其他干预',
- 'I-干预',
- 'I-教育/行为干预',
- 'I-药物干预',
- 'I-非药物干预',
- 'O-定性结论',
- 'O-定量结论',
- 'O-结论',
- 'O-结论主语',
- 'P-人群/患者类型',
- 'P-条件',
- 'P-研究对象',
- 'P-评估项',
- 'S-因素(病因/风险)分析',
- 'S-指南标准建议',
- 'S-治疗',
- 'S-病因学',
- 'S-统计分析',
- 'S-诊断',
- 'S-预后']
+label_list=['C','I','O','P','S']
 
 
 def main():
@@ -46,7 +24,7 @@ def main():
     
     logging.info('load data')
     
-    train_data=pd.read_json('./datasets/title_train.json')
+    train_data=pd.read_json('./datasets/hierarchical/titlener_train.json')
     train_set,val_set=train_test_split(train_data,test_size=0.2,random_state=1234)
     train_set=train_set.reset_index(drop=True)
     val_set=val_set.reset_index(drop=True)
@@ -87,7 +65,7 @@ def main():
     ema.register()
     
     logging.info('strat_training')
-    epoch=300   
+    epoch=200   
     best_score=1
     for e in range(0,epoch):
         train_loss=0
