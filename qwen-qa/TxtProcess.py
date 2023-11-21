@@ -31,15 +31,17 @@ def load_dir_and_split(file_dir_path=None,config:QWEN_CONFIG = None):
     pt=PrettyTable(['file_name','splited_len','vec_idx'])
     doc_split=[]
     
+    
+    vec_store=FAISS(embedding_function=embeddings)
+    
     for file in filenames:
         loader=TextLoader(file_path=file_dir_path+'/'+file,
                           encoding='utf-8')
         doc=loader.load()
-        doc_split+=textsplitter.split_documents(doc)
+        doc_split=textsplitter.split_documents(doc)
+        vec_store.add_documents(doc_split)
         
-    vec_store=FAISS.from_documents(documents=doc_split,
-                                    embedding=embeddings,
-                                    )
+
     index_name='financial'
     vec_store.save_local(folder_path=config.vec_store_path,
                             index_name=index_name)
