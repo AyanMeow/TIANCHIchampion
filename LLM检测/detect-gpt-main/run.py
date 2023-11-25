@@ -16,6 +16,7 @@ import functools
 import custom_datasets
 from multiprocessing.pool import ThreadPool
 import time
+import pandas as pd
 
 
 
@@ -623,16 +624,17 @@ def generate_data(dataset, key):
     # load data
     if dataset in custom_datasets.DATASETS:
         data = custom_datasets.load(dataset, cache_dir)
+    elif key == 'local':
+        data = datasets.load_dataset(path='csv',data_files=dataset)['train']['text']
     else:
         data = datasets.load_dataset(dataset, split='train', cache_dir=cache_dir)[key]
-
     # get unique examples, strip whitespace, and remove newlines
     # then take just the long examples, shuffle, take the first 5,000 to tokenize to save time
     # then take just the examples that are <= 512 tokens (for the mask model)
     # then generate n_samples samples
 
     # remove duplicates from the data
-    data = list(dict.fromkeys(data))  # deterministic, as opposed to set()
+    data = list(dict.fromkeys(data)) # deterministic, as opposed to set()
 
     # strip whitespace around each example
     data = [x.strip() for x in data]
@@ -750,13 +752,13 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_key', type=str, default="document")
     parser.add_argument('--pct_words_masked', type=float, default=0.3) # pct masked is actually pct_words_masked * (span_length / (span_length + 2 * buffer_size))
     parser.add_argument('--span_length', type=int, default=2)
-    parser.add_argument('--n_samples', type=int, default=200)
+    parser.add_argument('--n_samples', type=int, default=10)
     parser.add_argument('--n_perturbation_list', type=str, default="1,10")
     parser.add_argument('--n_perturbation_rounds', type=int, default=1)
-    parser.add_argument('--base_model_name', type=str, default="gpt2-medium")
+    parser.add_argument('--base_model_name', type=str, default="gpt2")
     parser.add_argument('--scoring_model_name', type=str, default="")
-    parser.add_argument('--mask_filling_model_name', type=str, default="t5-large")
-    parser.add_argument('--batch_size', type=int, default=50)
+    parser.add_argument('--mask_filling_model_name', type=str, default="lamini-t5")
+    parser.add_argument('--batch_size', type=int, default=10)
     parser.add_argument('--chunk_size', type=int, default=20)
     parser.add_argument('--n_similarity_samples', type=int, default=20)
     parser.add_argument('--int8', action='store_true')
@@ -800,7 +802,8 @@ if __name__ == '__main__':
     else:
         base_model_name = "openai-" + args.openai_model.replace('/', '_')
     scoring_model_string = (f"-{args.scoring_model_name}" if args.scoring_model_name else "").replace('/', '_')
-    SAVE_FOLDER = f"tmp_results/{output_subfolder}{base_model_name}{scoring_model_string}-{args.mask_filling_model_name}-{sampling_string}/{START_DATE}-{START_TIME}-{precision_string}-{args.pct_words_masked}-{args.n_perturbation_rounds}-{args.dataset}-{args.n_samples}"
+    base_path='LLM检测/detect-gpt-main'
+    SAVE_FOLDER = f"{base_path}/tmp_results/{output_subfolder}{base_model_name}{scoring_model_string}-{args.mask_filling_model_name}-{sampling_string}/{START_DATE}-{START_TIME}-{precision_string}-{args.pct_words_masked}-{args.n_perturbation_rounds}-{args.dataset}-{args.n_samples}"
     if not os.path.exists(SAVE_FOLDER):
         os.makedirs(SAVE_FOLDER)
     print(f"Saving results to absolute path: {os.path.abspath(SAVE_FOLDER)}")
@@ -821,11 +824,11 @@ if __name__ == '__main__':
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
     print(f"Using cache dir {cache_dir}")
-
-    GPT2_TOKENIZER = transformers.GPT2Tokenizer.from_pretrained('gpt2', cache_dir=cache_dir)
-
+    used_model='E:\自然语言处理\model\gpt2'
+    #GPT2_TOKENIZER = transformers.GPT2Tokenizer.from_pretrained('gpt-2', cache_dir=cache_dir)
+    GPT2_TOKENIZER = transformers.AutoTokenizer.from_pretrained(used_model)
     # generic generative model
-    base_model, base_tokenizer = load_base_model_and_tokenizer(args.base_model_name)
+    base_model, base_tokenizer = load_base_model_and_tokenizer(used_model)
 
     # mask filling t5 model
     if not args.baselines_only and not args.random_fills:
@@ -836,20 +839,23 @@ if __name__ == '__main__':
         elif args.half:
             half_kwargs = dict(torch_dtype=torch.bfloat16)
         print(f'Loading mask filling model {mask_filling_model_name}...')
-        mask_model = transformers.AutoModelForSeq2SeqLM.from_pretrained(mask_filling_model_name, **int8_kwargs, **half_kwargs, cache_dir=cache_dir)
+        use_mask_model='E:\自然语言处理\model\lamini-t5'
+        mask_model = transformers.AutoModelForSeq2SeqLM.from_pretrained(use_mask_model, **int8_kwargs, **half_kwargs, cache_dir=cache_dir)
         try:
             n_positions = mask_model.config.n_positions
         except AttributeError:
             n_positions = 512
     else:
         n_positions = 512
-    preproc_tokenizer = transformers.AutoTokenizer.from_pretrained('t5-small', model_max_length=512, cache_dir=cache_dir)
-    mask_tokenizer = transformers.AutoTokenizer.from_pretrained(mask_filling_model_name, model_max_length=n_positions, cache_dir=cache_dir)
+    preproc_tokenizer = transformers.AutoTokenizer.from_pretrained(use_mask_model, model_max_length=512, cache_dir=cache_dir)
+    mask_tokenizer = transformers.AutoTokenizer.from_pretrained(use_mask_model, model_max_length=n_positions, cache_dir=cache_dir)
     if args.dataset in ['english', 'german']:
         preproc_tokenizer = mask_tokenizer
 
     load_base_model()
 
+    args.dataset='E:\\自然语言处理\\TIANCHIchampion\\LLM检测\\adaptData\\processed_human.csv'
+    args.dataset_key='local'
     print(f'Loading dataset {args.dataset}...')
     data = generate_data(args.dataset, args.dataset_key)
     if args.random_fills:
