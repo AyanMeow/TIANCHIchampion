@@ -1,11 +1,14 @@
 import os
+import json
 from prettytable import PrettyTable
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import TextLoader
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores.faiss import FAISS
+from langchain.chains.summarize import load_summarize_chain
 
 from config import QWEN_CONFIG
+from Container import g_container
 
 
 def load_dir_and_split(file_dir_path=None,config:QWEN_CONFIG = None):
@@ -28,28 +31,43 @@ def load_dir_and_split(file_dir_path=None,config:QWEN_CONFIG = None):
     if not os.path.exists(config.vec_store_path):
         os.mkdir(config.vec_store_path)
     
-    pt=PrettyTable(['file_name','splited_len','vec_idx'])
+    pt=PrettyTable(['file_name','splited_len','vec_idx','summary'])
     doc_split=[]
     
+    chain=load_summarize_chain(llm=g_container.MODEL,
+                               chain_type='map_reduce')
     
-    vec_store=FAISS(embedding_function=embeddings)
+    vec_dict={}
     
     for file in filenames:
         loader=TextLoader(file_path=file_dir_path+'/'+file,
                           encoding='utf-8')
         doc=loader.load()
         doc_split=textsplitter.split_documents(doc)
-        vec_store.add_documents(doc_split)
-        
+        vec_store=FAISS.from_documents(documents=doc_split,
+                                       embedding=embeddings)
+        index=file.split('.')[0]
+        ipth=config.vec_store_path+'/'+index
+        if not os.path.exists(ipth):
+            os.mkdir(ipth)
+        vec_store.save_local(folder_path=ipth,
+                             index_name=index)
 
-    index_name='financial'
-    vec_store.save_local(folder_path=config.vec_store_path,
-                            index_name=index_name)
-    
-    pt.add_row([file,str(len(doc_split)),index_name])
+        summ=chain.run({"input_documents": doc_split}, return_only_outputs=True)
+        
+        vec_dict.update({
+            'index':index,
+            'summary':summ
+        })
+        pt.add_row([file,str(len(doc_split)),index,summ])
     
     print('vec_store_path:'+config.vec_store_path)
     print(pt)
+    
+    vec_dict=json.dump(vec_dict)
+    with open(config.vec_store_path+'/vec_dict.json','w',encoding='utf-8') as f:
+        f.write(vec_dict)
+        f.close()
     
     return 'done'
 
