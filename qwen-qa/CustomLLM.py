@@ -34,7 +34,6 @@ class LocalLLM(LLM):
         inputs=inputs.to(self.model.device)
         outputs=self.model.generate(**inputs)
         outputs=self.tokenizer.decode(outputs.cpu()[0],skip_special_tokens=True)
-        print(3)
         _run_manager = run_manager  or CallbackManagerForLLMRun.get_noop_manager()
         _run_manager.on_text(text=outputs,color="green")
         return outputs
@@ -64,3 +63,47 @@ class LocalLLM(LLM):
         model.generation_config = ts.generation.GenerationConfig.from_pretrained(repo_path,trust_remote_code=trust_remote_code)
         cfg=ts.AutoConfig.from_pretrained(repo_path,trust_remote_code=trust_remote_code).to_dict()
         return cls(model=model,tokenizer=tokenizer,maxlen=maxlen,model_cfg=cfg)
+    
+
+import dashscope
+from dashscope import Generation
+from http import HTTPStatus
+
+class QWENonlie(LLM):
+    model_name :str = Generation.Models.qwen_max
+    temperature :float = 0.5
+    max_token :int = 1500
+    api_key :str = None
+    
+    @property
+    def _llm_type(self) -> str:
+        return self.model_name
+    
+    @property
+    def _identifying_params(self) -> Mapping[str, Any]:
+        return {
+            "model_name":self.model_name,
+            "temperature":self.temperature,
+            "max_token":self.max_token
+        }
+        
+    def _call(
+        self, 
+        prompt: str, 
+        stop: List[str] = None, 
+        run_manager: CallbackManagerForLLMRun = None, 
+        **kwargs: Any
+        ) -> str:
+        dashscope.api_key=self.api_key
+    
+    @classmethod
+    def from_name(
+        cls,
+        api_key :str = None,
+        model_name :str = Generation.Models.qwen_max,
+        temperature :float = 0.5,
+        max_token :int = 1500,
+    ):
+        if not api_key :
+            return 'empty api key'
+        return cls(model_name,temperature,max_token,api_key)
