@@ -3,92 +3,89 @@ import json
 from prettytable import PrettyTable
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import TextLoader
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.embeddings import DashScopeEmbeddings
+from langchain.embeddings.base import Embeddings
 from langchain.vectorstores.faiss import FAISS
 from langchain.chains.summarize import load_summarize_chain
+from langchain.docstore.document import Document
+from typing import List,Dict
+
 
 from config import QWEN_CONFIG
 from Container import g_container
 
 
-def load_dir_and_split(file_dir_path=None,config:QWEN_CONFIG = None):
-    '''
-    处理txt文件并向量化,持久化到本地存储
-    '''
-    assert file_dir_path != None,'empty file dir'
-    
-    if config.online_emb[0]:
-        embeddings=HuggingFaceEmbeddings(model_name=config.online_emb[1])
-    elif config.local_emb[0]:
-        embeddings=HuggingFaceEmbeddings(model_name=config.local_emb[1])
-    else:
-        return False
-    
-    filenames=os.listdir(file_dir_path)
-    textsplitter=RecursiveCharacterTextSplitter(
-        chunk_size=config.chunk_size, chunk_overlap=config.chunk_overlap)
-    
-    if not os.path.exists(config.vec_store_path):
-        os.mkdir(config.vec_store_path)
-    
-    pt=PrettyTable(['file_name','splited_len','vec_idx','summary'])
-    doc_split=[]
-    
-    chain=load_summarize_chain(llm=g_container.MODEL,
-                               chain_type='map_reduce')
-    
-    vec_dict={}
-    
-    for file in filenames:
-        loader=TextLoader(file_path=file_dir_path+'/'+file,
-                          encoding='utf-8')
-        doc=loader.load()
-        doc_split=textsplitter.split_documents(doc)
-        vec_store=FAISS.from_documents(documents=doc_split,
-                                       embedding=embeddings)
-        index=file.split('.')[0]
-        ipth=config.vec_store_path+'/'+index
-        if not os.path.exists(ipth):
-            os.mkdir(ipth)
-        vec_store.save_local(folder_path=ipth,
-                             index_name=index)
+def do_ds_embedding(
+    docs:List[Document],
+    emb_model:DashScopeEmbeddings,
+    chunk_size:int=25
+) -> Dict[str,any]:
+    texts = [doc.page_content for doc in docs]
+    meta_datas = [doc.metadata for doc in docs]
+    chunk_texts=[texts[i:i+chunk_size] for i in range(0,len(texts),chunk_size)]
+    embeddings=[]
+    for chunk in chunk_texts:
+        emb=emb_model.embed_documents(chunk)
+        embeddings=embeddings+emb
+    return {
+        "texts":texts,
+        "embeddings":embeddings,
+        "meta_datas":meta_datas
+    }
 
-        summ=chain.run({"input_documents": doc_split}, return_only_outputs=True)
+# class DS_Embeddings(Embeddings):
+    
+#     def __init__(self,model_name :str) -> None:
+#         self.model_name = model_name
+
+#     def embed_documents(
+#         self, 
+#         texts: List[str]
+#         ) -> List[List[float]]:
+#         return super().embed_documents(texts)
+    
+class faiss_kb_ds(object):
+    def __init__(
+        self,
+        vs_path:str = None,
+        kb_path:str = None,
+        embs:Embeddings = None
+        ) -> None:
+        self.vs_path = vs_path
+        self.kb_path = kb_path
+        self.embs = embs
+        init=Document(page_content='init',metadata={})
+        self.kb=FAISS.from_documents(
+            documents=[init],embedding=self.embs,normalize_L2=True
+        )
+        ids=list(self.kb.docstore._dict.keys())
+        self.kb.delete(ids)
+    
+    def do_add_doc(
+        self,
+        docs:List[Document]
+    ):
+        data=do_ds_embedding(docs=docs,emb_model=self.embs)
+        ids=self.kb.add_embeddings(
+            text_embeddings=zip(data['texts'],data['embeddings']),
+            metadatas=data['meta_datas'])
+        doc_infos=[{"id":id,"meta_data":d.metadata} for id,d in zip(ids,docs)]
+        return doc_infos 
+    
+    def do_search(
+        self,
+        query: str,
+        top_k: int,
+        threshold: int = 0.5
+        ) -> List[Document]:
+        query_emb=self.embs.embed_query(query)
+        result=self.kb.similarity_search_with_score_by_vector(
+            embedding=query_emb,k=top_k,score_threshold=threshold
+        )
+        return result
+    
+    def do_save(self):
+        self.kb.save_local(folder_path=self.vs_path)
         
-        vec_dict.update({
-            'index':index,
-            'summary':summ
-        })
-        pt.add_row([file,str(len(doc_split)),index,summ])
-    
-    print('vec_store_path:'+config.vec_store_path)
-    print(pt)
-    
-    vec_dict=json.dump(vec_dict)
-    with open(config.vec_store_path+'/vec_dict.json','w',encoding='utf-8') as f:
-        f.write(vec_dict)
-        f.close()
-    
-    return 'done'
-
-def load_vec_and_similarty_search(query = None,vec_idx = 'financial',config:QWEN_CONFIG = None):
-    '''
-    加载向量库,并进行相似度搜索,返回topK个结果。
-    '''
-    assert query != None,'empty vector index'
-    
-    if config.online_emb[0]:
-        embeddings=HuggingFaceEmbeddings(model_name=config.online_emb[1])
-    elif config.local_emb[0]:
-        embeddings=HuggingFaceEmbeddings(model_name=config.local_emb[1])
-    else:
-        return False
-    
-    vec_store=FAISS.load_local(folder_path=config.vec_store_path,
-                               embeddings=embeddings,
-                               index_name=vec_idx)
-    
-    searchs=vec_store.similarity_search(query=query,
-                                        k=config.vec_search_topK)
-    
-    return searchs
+    def do_load(self):
+        self.kb.load_local(folder_path=self.vs_path)

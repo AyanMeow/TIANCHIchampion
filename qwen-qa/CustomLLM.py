@@ -94,7 +94,28 @@ class QWENonlie(LLM):
         run_manager: CallbackManagerForLLMRun = None, 
         **kwargs: Any
         ) -> str:
+        _run_manager = run_manager or CallbackManagerForLLMRun.get_noop_manager()
         dashscope.api_key=self.api_key
+        response=Generation.call(
+            model=self.model_name,
+            prompt=prompt,
+            api_key=self.api_key,
+            max_tokens=self.max_token,
+            temperature=self.temperature,
+            stop=stop,
+            seed=42,
+            result_format='text'
+        )
+        if response.status_code == HTTPStatus.OK:
+            message=response.output.text
+            #message=[o.message.content for o in output]
+            _run_manager.on_text(message,color='green')
+            return message
+        else:
+            print('Request id: %s, Status code: %s, error code: %s, error message: %s' % (
+                response.request_id, response.status_code,
+                response.code, response.message
+            ))
     
     @classmethod
     def from_name(
@@ -106,4 +127,7 @@ class QWENonlie(LLM):
     ):
         if not api_key :
             return 'empty api key'
-        return cls(model_name,temperature,max_token,api_key)
+        return cls(model_name=model_name,
+                   temperature=temperature,
+                   max_token=max_token,
+                   api_key=api_key)
