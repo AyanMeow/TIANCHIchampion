@@ -1,6 +1,7 @@
-from typing import Any, List, Mapping, Optional
-from langchain.callbacks.manager import CallbackManagerForLLMRun
+from typing import Any, List, Mapping, Optional, Union
+from langchain.callbacks.manager import CallbackManagerForLLMRun, Callbacks
 from langchain.llms.base import LLM
+from langchain.schema import LLMResult, PromptValue
 import transformers as ts
 from transformers import PreTrainedModel,PreTrainedTokenizer,PretrainedConfig
 from typing import Optional,Literal,Dict
@@ -71,7 +72,7 @@ from http import HTTPStatus
 
 class QWENonlie(LLM):
     model_name :str = Generation.Models.qwen_max
-    temperature :float = 0.5
+    temperature :float = 0.3
     max_token :int = 1500
     api_key :str = None
     
@@ -86,6 +87,14 @@ class QWENonlie(LLM):
             "temperature":self.temperature,
             "max_token":self.max_token
         }
+    
+    # def generate_prompt(
+    #     self, 
+    #     prompts: List[PromptValue], 
+    #     stop: List[str] | None = None, 
+    #     callbacks: Callbacks | List[Callbacks] = None, 
+    #     **kwargs: Any) -> LLMResult:
+    #     return super().generate_prompt(prompts, stop, callbacks, **kwargs)
         
     def _call(
         self, 
@@ -102,7 +111,7 @@ class QWENonlie(LLM):
             api_key=self.api_key,
             max_tokens=self.max_token,
             temperature=self.temperature,
-            stop=stop,
+            stop=None,
             seed=42,
             result_format='text'
         )
@@ -116,6 +125,8 @@ class QWENonlie(LLM):
                 response.request_id, response.status_code,
                 response.code, response.message
             ))
+            print(response)
+            return ''
     
     @classmethod
     def from_name(
