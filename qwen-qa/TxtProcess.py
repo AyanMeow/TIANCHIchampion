@@ -16,7 +16,9 @@ from config import QWEN_CONFIG
 from Container import g_container
 from Tools.keywords_extra import LLMKeywordsEXChain
 
-def do_ds_embedding(
+#TODO:单个关键词对应一段文本可能太冗余，应该更适合小切片，
+# 例如1-2句话的切片，每个切片对应1-2个关键词，降低冗余存取
+def do_ds_keywords_embedding(
     docs:List[Document],
     emb_model:DashScopeEmbeddings,
     chunk_size:int=25,
@@ -44,16 +46,23 @@ def do_ds_embedding(
         "meta_datas":meta_datas
     }
 
-# class DS_Embeddings(Embeddings):
-    
-#     def __init__(self,model_name :str) -> None:
-#         self.model_name = model_name
 
-#     def embed_documents(
-#         self, 
-#         texts: List[str]
-#         ) -> List[List[float]]:
-#         return super().embed_documents(texts)
+def do_ds_embedding(
+    docs:List[Document],
+    emb_model:DashScopeEmbeddings,
+    chunk_size:int=25,
+    **kwargs
+) -> Dict[str,any]:
+    texts = [doc.page_content.replace('\n','') for doc in docs]
+    meta_datas = [doc.metadata for doc in docs] 
+    embeddings = emb_model.embed_documents(texts)
+    return {
+        "texts":texts,
+        "embeddings":embeddings,
+        "meta_datas":meta_datas
+    }
+   
+
     
 class faiss_kb_ds(object):
     def __init__(
@@ -87,8 +96,8 @@ class faiss_kb_ds(object):
     def do_search(
         self,
         query: str,
-        top_k: int,
-        threshold: int = 1
+        top_k: int = 5,
+        threshold: int = 0.5
         ) -> List[Document]:
         query_emb=self.embs.embed_query(query)
         result=self.kb.similarity_search_with_score_by_vector(

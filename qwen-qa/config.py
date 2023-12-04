@@ -10,7 +10,7 @@ class QWEN_CONFIG(object):
                  api_key = None,
                  vec_store_path = './vec_store',
                  vec_search_topK = 5,
-                 chunk_size = 500,
+                 chunk_size = 2000,
                  chunk_overlap_rate = 0.1,
                  ):
         super(QWEN_CONFIG, self,).__init__()

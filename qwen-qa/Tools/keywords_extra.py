@@ -17,6 +17,7 @@ import json
 
 _PROMPT_TEMPLATE = """
 请你提取下面段落的关键词，要求所提取的关键词能够鲜明表示内容性质。
+如果有必要，你可以使用金融领域关键词进行概括。
 你所提取的关键词应该是名词短语，不要包含谓语、助词等。
 你所提取的关键词应不少于{topk}个。
 同时，对于内容中存在的公司、机构名称，地址信息，人名等，也作为关键词。
@@ -73,10 +74,13 @@ class LLMKeywordsEXChain(LLMChain):
         _run_manager=run_manager or CallbackManagerForChainRun.get_noop_manager()
         _run_manager.on_text(text=self.input_key)
         
-        #TF-IDF
+        #TF-IDF-效果不好
         texts=inputs[self.input_key]
         extration=analyse.extract_tags(texts,topK=top_k, withWeight=False, allowPOS=())
         extration_tf=[e for e in extration if e not in self.stopwords]
+        
+        #Hanlp
+        
         
         #LLM
         stop='---output'
@@ -125,7 +129,7 @@ class LLMKeywordsEXChain(LLMChain):
         cls,
         llm: BaseLanguageModel,
         prompt: BasePromptTemplate = PROMPT,
-        stopwords_path :str = 'I:\自然语言学习\TIANCHIchampion\qwen-qa\stopwords.txt'
+        stopwords_path :str = './stopwords.txt'
     ):
         with open(stopwords_path,'r',encoding='utf-8') as f:
             stopw=f.readlines()
