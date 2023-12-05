@@ -85,7 +85,7 @@ class faiss_kb_ds(object):
     def do_add_doc(
         self,
         docs:List[Document]
-    ):
+    ) -> List[dict]:
         data=do_ds_embedding(docs=docs,emb_model=self.embs,kw_ex=self.keywords_ex)
         ids=self.kb.add_embeddings(
             text_embeddings=zip(data['texts'],data['embeddings']),
@@ -99,9 +99,9 @@ class faiss_kb_ds(object):
         top_k: int = 5,
         threshold: int = 0.5
         ) -> List[Document]:
-        query_emb=self.embs.embed_query(query)
-        result=self.kb.similarity_search_with_score_by_vector(
-            embedding=query_emb,k=top_k,score_threshold=threshold
+        #query_emb=self.embs.embed_query(query)
+        result=self.kb.similarity_search_with_relevance_scores(
+            query=query,k=top_k,score_threshold=threshold
         )
         return result
     
@@ -109,8 +109,13 @@ class faiss_kb_ds(object):
     def do_save(self,index:str = 'index'):
         self.kb.save_local(folder_path=self.vs_path,index_name=index)
         
-    def do_load(self):
-        self.kb.load_local(folder_path=self.vs_path)
+    def do_load(self,index : str = 'index'):
+        self.kb=self.kb.load_local(folder_path=self.vs_path,
+                           embeddings=self.embs,
+                           index_name=index
+                           )
+    def do_view(self):
+        return self.kb.__sizeof__()
         
 import pdfplumber
 from langchain.chains import LLMChain
@@ -118,27 +123,32 @@ from langchain.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     CallbackManagerForChainRun,
 )
-def load_dir_txt_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
+def load_dir_txt_idx_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
     _PROMPT_TEM="""
-    你需要在用户给出的内容中找到所有不包含“证券股份”和“证券”的所有公司、机构名称。
+    你需要在用户给出的内容中找到所有公司、机构的名称。
     你需要以字符串数组的形式返回符合要求的答案。
-    在>>>>和>>>>之间是一个例子：
+    在>>>>和>>>>之间是一些例子：
 
     >>>>
     
     用户输入：创业板公司具有创新投入大、新旧产业融合成功与否存在不确定性、\n尚处于成长期、经营风险高、业绩不稳定、退市风险高等特点，投资者面临较\n上海真兰仪表科技股份有限公司\n大的市场风险。投资者应充分了解创业板市场的投资风险及本公司所披露的风\n险因素，审慎作出投资决定。\nZenner Metering Technology（Shanghai）Ltd.\n（上海市青浦区盈港东路 6558 号 4 幢）\n首次公开发行股票并在创业板上市\n招股意向书\n保荐机构（主承销商）\n（福州市鼓楼区鼓屏路 27号 1#楼 3层、4 层、5 层）华泰联合证券有限公司
-    你的答案：["上海真兰仪表科技股份有限公司"]
+    你的答案：上海真兰仪表科技股份有限公司
 
+    用户输入：'海尔施生物医药股份有限公司\n（宁波市小港街道前进村半港河西 159 号）\n首次公开发行股票招股意向书\n（封卷稿）\n保荐人（主承销商）：瑞信方正证券有限责任公司\n（北京市西城区金融大街甲 9号金融街中心南楼 15层）'
+    你的答案：海尔施生物医药股份有限公司
+    
     >>>>
     
+    注意：
     你的回答格式应该按照下面的内容，请注意---output等标记都必须输出，这是我用来提取答案的标记。
-    不要输出中文的逗号，不要输出引号。如果你找不到符合要求的答案，则返回[]。
-    你不可以编造答案，也不可以输出要求以外的文字。
+    不要输出中文的逗号，不要输出引号。如果你找不到符合要求的答案，则输出无。
+    你输出的答案只能使用简体中文，如果不是简体中文，你需要将其转换为简体中文再输出。
+    你不可以编造答案，不可以输出重复答案，也不可以输出要求以外的文字。
     
     content:${{用户的输入}}
     
     ---output
-    ["你的答案1","你的答案2",...]
+    ${{你的答案1}},${{你的答案2}},...
     
     现在，我们开始作答：
     content:{content}
@@ -157,10 +167,17 @@ def load_dir_txt_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
     llm_chain = LLMChain(llm=g_container.MODEL, prompt=PROMPT)
     file_names = [f for f in os.listdir(txt_dir) if os.path.isfile(os.path.join(txt_dir, f))]
     file_names = tqdm(file_names)
+    kb_idx=faiss_kb_ds(
+        vs_path=cfg.vec_store_path,
+        kb_path='./',
+        embs=g_container.EMBEDDING
+    )
     for file in file_names:
         pdf=file.split('.')[0]+'.PDF'
         with pdfplumber.open(pdf_dir+'/'+pdf) as p:
-            first_page=p.pages[0].extract_text()
+            first_page=p.pages[0].extract_text().replace(' ','')
+            if first_page == '':
+                first_page=p.pages[1].extract_text().replace(' ','')
             companys=find_company(first_page)
             companys=','.join(companys)
         llmout=llm_chain.predict(
@@ -168,4 +185,21 @@ def load_dir_txt_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
             stop=['---output'],
             callbacks=CallbackManagerForChainRun.get_noop_manager()
             )
-        print(llmout)
+        llmout=llmout.split('\n')[1]
+        llmout=llmout.split(',')
+        first_page=first_page.replace('\n','')
+        # print(llmout)
+        for company in llmout:
+            doc=Document(
+                page_content=company,
+                metadata={"source":file.split('.')[0]}
+                )
+            info=kb_idx.do_add_doc([doc])
+            info[0].update(
+                {"pagecontent":company}
+            )
+            print(info)
+        
+    kb_idx.do_save()
+    return kb_idx
+        
