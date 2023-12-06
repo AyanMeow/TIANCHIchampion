@@ -3,13 +3,13 @@ import json
 from prettytable import PrettyTable
 from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.document_loaders import TextLoader
-from langchain.embeddings import DashScopeEmbeddings
+from langchain.embeddings.base import Embeddings
 from langchain.embeddings.base import Embeddings
 from langchain.vectorstores.faiss import FAISS
 from langchain.chains.summarize import load_summarize_chain
 from langchain.docstore.document import Document
 from typing import List,Dict
-from tqdm import tqdm
+from tqdm import tqdm_notebook as tqdm
 import uuid
 from langchain.prompts import PromptTemplate
 from config import QWEN_CONFIG
@@ -20,7 +20,7 @@ from Tools.keywords_extra import LLMKeywordsEXChain
 # 例如1-2句话的切片，每个切片对应1-2个关键词，降低冗余存取
 def do_ds_keywords_embedding(
     docs:List[Document],
-    emb_model:DashScopeEmbeddings,
+    emb_model:Embeddings,
     chunk_size:int=25,
     kw_ex:LLMKeywordsEXChain = None,
 ) -> Dict[str,any]:
@@ -49,7 +49,7 @@ def do_ds_keywords_embedding(
 
 def do_ds_embedding(
     docs:List[Document],
-    emb_model:DashScopeEmbeddings,
+    emb_model:Embeddings,
     chunk_size:int=25,
     **kwargs
 ) -> Dict[str,any]:
@@ -98,12 +98,17 @@ class faiss_kb_ds(object):
         query: str,
         top_k: int = 5,
         threshold: int = 0.5
-        ) -> List[Document]:
+        ) -> dict:
         #query_emb=self.embs.embed_query(query)
         result=self.kb.similarity_search_with_relevance_scores(
             query=query,k=top_k,score_threshold=threshold
         )
-        return result
+        documents=[res[0] for res in result]
+        scores=[res[1] for res in result]
+        return {
+            "documents":documents,
+            "scores":scores
+        }
     
     
     def do_save(self,index:str = 'index'):
@@ -123,6 +128,9 @@ from langchain.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     CallbackManagerForChainRun,
 )
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import TextLoader
+from prettytable import PrettyTable
 def load_dir_txt_idx_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
     _PROMPT_TEM="""
     你需要在用户给出的内容中找到所有公司、机构的名称。
@@ -166,13 +174,13 @@ def load_dir_txt_idx_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
         return ans
     llm_chain = LLMChain(llm=g_container.MODEL, prompt=PROMPT)
     file_names = [f for f in os.listdir(txt_dir) if os.path.isfile(os.path.join(txt_dir, f))]
-    file_names = tqdm(file_names)
     kb_idx=faiss_kb_ds(
         vs_path=cfg.vec_store_path,
         kb_path='./',
         embs=g_container.EMBEDDING
     )
-    for file in file_names:
+    table=PrettyTable(['source','company','doc_len','chunk_size','meta_data','save_index'])
+    for file in tqdm(file_names,desc='handle files:',position=0,leave=False):
         pdf=file.split('.')[0]+'.PDF'
         with pdfplumber.open(pdf_dir+'/'+pdf) as p:
             first_page=p.pages[0].extract_text().replace(' ','')
@@ -183,11 +191,11 @@ def load_dir_txt_idx_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
         llmout=llm_chain.predict(
             content=companys,
             stop=['---output'],
-            callbacks=CallbackManagerForChainRun.get_noop_manager()
+            callbacks=CallbackManagerForChainRun.get_noop_manager().get_child()
             )
         llmout=llmout.split('\n')[1]
         llmout=llmout.split(',')
-        first_page=first_page.replace('\n','')
+
         # print(llmout)
         for company in llmout:
             doc=Document(
@@ -195,11 +203,46 @@ def load_dir_txt_idx_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
                 metadata={"source":file.split('.')[0]}
                 )
             info=kb_idx.do_add_doc([doc])
-            info[0].update(
-                {"pagecontent":company}
-            )
-            print(info)
+            table.add_row([file,company,'-','-',str(doc.metadata),'index'])
+            # print(info)
+        kb=faiss_kb_ds(
+            vs_path=cfg.vec_store_path,
+            kb_path='./',
+            embs=g_container.EMBEDDING
+        )
+        spliter=RecursiveCharacterTextSplitter(
+            chunk_size=cfg.chunk_size, chunk_overlap=cfg.chunk_overlap
+        )
+        docs=TextLoader(file_path=txt_dir+'/'+file).load_and_split(text_splitter=spliter)
+        first_page=first_page.replace('\n','')
+        first_page_doc=Document(
+            page_content=first_page,
+            metadata=docs[0].metadata
+        )
+        docs.insert(0,first_page_doc)
+        
+        #处理表格
+        with pdfplumber.open(pdf_dir+'/'+pdf) as p:
+            for page in tqdm(p.pages,desc='handle tables:',position=1,leave=False):
+                dtables=page.extract_tables()
+                if type(dtable) != list : continue
+                for dtable in dtables:
+                    t=PrettyTable([str(i) for i in range(len(dtable[0]))])
+                    t.add_rows(dtable)
+                    table_doc=Document(page_content=t.get_formatted_string(),metadata=docs[0].metadata)
+                    docs.append(table_doc)
+                
+        kb.do_add_doc(docs)
+        kb.do_save(index=file.split('.')[0])
+        table.add_row([file,str(llmout),len(docs),cfg.chunk_size,str(docs[0].metadata),file.split('.')[0]])
+        #print(table)
         
     kb_idx.do_save()
+    
+    print(table)
+    
+    with open(cfg.vec_store_path+'/description.csv','w',encoding='utf-8') as f:
+        f.write(table.get_csv_string())
+    
     return kb_idx
         
