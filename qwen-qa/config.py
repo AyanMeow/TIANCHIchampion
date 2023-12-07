@@ -11,7 +11,7 @@ class QWEN_CONFIG(object):
                  vec_store_path = './vec_store',
                  vec_search_topK = 5,
                  chunk_size = 700,
-                 chunk_overlap_rate = 0.1,
+                 chunk_overlap_rate = 0.2,
                  ):
         super(QWEN_CONFIG, self,).__init__()
         #标书等文本向量设置

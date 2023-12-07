@@ -9,7 +9,7 @@ from langchain.vectorstores.faiss import FAISS
 from langchain.chains.summarize import load_summarize_chain
 from langchain.docstore.document import Document
 from typing import List,Dict
-from tqdm import tqdm_notebook as tqdm
+from tqdm.notebook import tqdm
 import uuid
 from langchain.prompts import PromptTemplate
 from config import QWEN_CONFIG
@@ -180,7 +180,9 @@ def load_dir_txt_idx_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
         embs=g_container.EMBEDDING
     )
     table=PrettyTable(['source','company','doc_len','chunk_size','meta_data','save_index'])
-    for file in tqdm(file_names,desc='handle files:',position=0,leave=False):
+    filet=tqdm(file_names,desc='handle files:',position=0,leave=False)
+    for file in filet:
+        filet.set_postfix({"file":file})
         pdf=file.split('.')[0]+'.PDF'
         with pdfplumber.open(pdf_dir+'/'+pdf) as p:
             first_page=p.pages[0].extract_text().replace(' ','')
@@ -211,7 +213,8 @@ def load_dir_txt_idx_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
             embs=g_container.EMBEDDING
         )
         spliter=RecursiveCharacterTextSplitter(
-            chunk_size=cfg.chunk_size, chunk_overlap=cfg.chunk_overlap
+            chunk_size=cfg.chunk_size, chunk_overlap=cfg.chunk_overlap,
+            separators=["(?<=\。)","\n\n", ""]
         )
         docs=TextLoader(file_path=txt_dir+'/'+file).load_and_split(text_splitter=spliter)
         first_page=first_page.replace('\n','')
@@ -222,10 +225,14 @@ def load_dir_txt_idx_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
         docs.insert(0,first_page_doc)
         
         #处理表格
+        black=['43571629ce9fb30b44ccefdca9f637102c16d1a2.txt']
+        from pdfplumber.page import Page
         with pdfplumber.open(pdf_dir+'/'+pdf) as p:
             for page in tqdm(p.pages,desc='handle tables:',position=1,leave=False):
+                if file in black:break
+                if type(page) != Page : continue
                 dtables=page.extract_tables()
-                if type(dtable) != list : continue
+                if type(dtables) != list : continue
                 for dtable in dtables:
                     t=PrettyTable([str(i) for i in range(len(dtable[0]))])
                     t.add_rows(dtable)
