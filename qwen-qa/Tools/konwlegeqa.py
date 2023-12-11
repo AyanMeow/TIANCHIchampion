@@ -9,7 +9,6 @@ from langchain.schema.language_model import BaseLanguageModel
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from typing import Optional
-
 from Container import g_container
 from config import QWEN_CONFIG
 from TxtProcess import faiss_kb_ds
@@ -192,8 +191,12 @@ class LLMKnowledgeChain(LLMChain):
         return cls(llm_chain=llm_chain, llm_chain2=llm_chain2,llm=llm,config=cfg,**kwargs)
 
 
-def run_knowledge_qa(query:str,cfg:QWEN_CONFIG):
+def run_knowledge_qa(query:str):
     llm_model=g_container.MODEL
-    llm_chain=LLMKnowledgeChain.from_llm(llm=llm_model,cfg=cfg)
+    llm_chain=LLMKnowledgeChain.from_llm(llm=llm_model,cfg=g_container.GCONFIG)
     ans=llm_chain._call({llm_chain.input_key:query})
     return ans
+
+from pydantic import BaseModel, Field
+class KnowledgeSearchInput(BaseModel):
+    question: str = Field(description="The query to be searched")

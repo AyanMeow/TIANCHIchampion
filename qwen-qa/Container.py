@@ -6,7 +6,7 @@ class GlobalContainer(object):
         self.MODEL = None
         self.DATABASE = None
         self.EMBEDDING = None
-
+        self.GCONFIG = None
 g_container=GlobalContainer()
 
     
