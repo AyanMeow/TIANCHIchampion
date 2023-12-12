@@ -24,7 +24,7 @@ def do_ds_keywords_embedding(
     chunk_size:int=25,
     kw_ex:LLMKeywordsEXChain = None,
 ) -> Dict[str,any]:
-    texts = [doc.page_content.replace('\n','') for doc in docs]
+    texts = [doc.page_content.replace('\n','')if doc.metadata['type'] != 'table' else doc.page_content for doc in docs]
     meta_datas = [doc.metadata for doc in docs]
     
     texts_t = tqdm(texts)
@@ -234,9 +234,14 @@ def load_dir_txt_idx_process(txt_dir:str,pdf_dir:str,cfg:QWEN_CONFIG):
                 dtables=page.extract_tables()
                 if type(dtables) != list : continue
                 for dtable in dtables:
-                    t=PrettyTable([str(i) for i in range(len(dtable[0]))])
-                    t.add_rows(dtable)
-                    table_doc=Document(page_content=t.get_formatted_string(),metadata=docs[0].metadata)
+                    if dtable == None:continue
+                    rows=[]
+                    for dt in dtable:
+                        row1 = ['-' if item is None else item for item in dt]
+                        row2 = ['-' if item == '' else item for item in row1]
+                        rows.append(';'.join(row2))
+                    table_str = '\n'.join(rows)
+                    table_doc=Document(page_content=table_str,metadata={"type":"table"})
                     docs.append(table_doc)
                 
         kb.do_add_doc(docs)

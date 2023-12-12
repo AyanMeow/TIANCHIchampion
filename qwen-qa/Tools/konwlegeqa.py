@@ -57,7 +57,7 @@ PROMPT=PromptTemplate(
 
 _PROMPT_TEMPLATE2 = """
 你是一个帮我回答用户提问的人工助手。
-对于用户提出的问题，你需要从相关内容中找到答案，并对问题进行填空再回答，不可以只返回答案。
+对于用户提出的问题，你需要从相关内容中找到答案，并与问题进行组合作为答案，不可以只返回答案。
 你所找到的答案的上下文中必须包含至少1个关键词。
 在>>>> >>>>之间是一些示例：
 
@@ -97,13 +97,18 @@ class LLMKnowledgeChain(LLMChain):
     llm_chain:LLMChain
     llm_chain2:LLMChain
     llm:Optional[BaseLanguageModel] = None
-    stopwords :List[str] = None
+    stopwords :List[str] = ['---output']
     prompt:BasePromptTemplate=PROMPT
     prompt2:BasePromptTemplate=PROMPT2
     input_key:str='inputs'
     output_key:str='outputs'
     
     config : QWEN_CONFIG
+    
+    @property
+    def input_keys(self) -> List[str]:
+        return [self.input_key]
+    
     
     def _process_llm_out(self,llm_out:str,stop:str)->str:
         llm_out=llm_out.split('\n')
@@ -145,7 +150,7 @@ class LLMKnowledgeChain(LLMChain):
                            embs=g_container.EMBEDDING)
             kb.do_load(index=did)
             for keyword in query_info['keywords']:
-                docs_list=kb.do_search(query=keyword,top_k=3,threshold=0.7)['documents']
+                docs_list=kb.do_search(query=keyword,top_k=5,threshold=0.5)['documents']
                 doc_pages=[d.page_content for d in docs_list]
                 pagelist.extend(doc_pages)
         pagelist=list(set(pagelist))
@@ -199,4 +204,4 @@ def run_knowledge_qa(query:str):
 
 from pydantic import BaseModel, Field
 class KnowledgeSearchInput(BaseModel):
-    question: str = Field(description="The query to be searched")
+    question: str = Field(description="需要在知识库中搜索相关答案的问题。")
