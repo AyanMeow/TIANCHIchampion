@@ -176,11 +176,12 @@ class LLMKnowledgeChain(LLMChain):
         )
         llm_output = self._process_llm_out(llm_output,'---output')
         
-        return {
+        final_ans={
             self.input_key:inputs[self.input_key],
             self.output_key:llm_output,
             'relent_docs':doc_ids,
         }
+        return final_ans[self.output_key]
             
     @classmethod
     def from_llm(

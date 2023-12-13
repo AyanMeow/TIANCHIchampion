@@ -151,11 +151,12 @@ class LLMSQLChain(LLMChain):
         answers=[data for data in sql_result]
         conn.close()
         
-        return {
+        final_ans = {
             self.input_key:query,
             "SQLquery":llm_out,
             self.output_key:answers
         }
+        return final_ans[self.output_key]
     
     @classmethod
     def from_llm(
