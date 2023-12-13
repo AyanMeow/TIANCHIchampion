@@ -70,6 +70,16 @@ import dashscope
 from dashscope import Generation
 from http import HTTPStatus
 
+
+temp="""Question: 我想知道股票600887在申万行业分类下的二级行业是什么？用最新的数据。
+Thought: 用户想了解股票600887在申万行业分类下的二级行业，需要使用知识库工具查找最新的数据。
+Action:
+{
+    "action": "knowledegQA",
+    "action_input": "股票600887在申万行业分类下的二级行业是什么"
+}
+"""
+
 class QWENonlie(LLM):
     model_name :str = Generation.Models.qwen_max
     temperature :float = 0.3
@@ -88,13 +98,6 @@ class QWENonlie(LLM):
             "max_token":self.max_token
         }
     
-    # def generate_prompt(
-    #     self, 
-    #     prompts: List[PromptValue], 
-    #     stop: List[str] | None = None, 
-    #     callbacks: Callbacks | List[Callbacks] = None, 
-    #     **kwargs: Any) -> LLMResult:
-    #     return super().generate_prompt(prompts, stop, callbacks, **kwargs)
         
     def _call(
         self, 
@@ -119,7 +122,7 @@ class QWENonlie(LLM):
             message=response.output.text
             #message=[o.message.content for o in output]
             _run_manager.on_text(message,color='green')
-            return message
+            return temp
         else:
             print('Request id: %s, Status code: %s, error code: %s, error message: %s' % (
                 response.request_id, response.status_code,

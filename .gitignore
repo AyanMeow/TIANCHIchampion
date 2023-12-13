@@ -1,3 +1,4 @@
 医疗论文/hierarchical/
 医疗论文/pretrained_models/
 qwen-qa/vec_store/
+qwen-qa/__pycache__/

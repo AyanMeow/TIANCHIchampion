@@ -13,6 +13,8 @@ class GlobalContainer(object):
         self.EMBEDDING: Embeddings = None
         self.GCONFIG: QWEN_CONFIG = None
         
+        self.MEMORY_WINDOW: int = 7
+        
 g_container=GlobalContainer()
 
     

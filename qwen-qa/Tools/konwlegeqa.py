@@ -193,7 +193,7 @@ class LLMKnowledgeChain(LLMChain):
     ):
         llm_chain = LLMChain(llm=llm, prompt=prompt)
         llm_chain2 = LLMChain(llm=llm,prompt=prompt2)
-        return cls(llm_chain=llm_chain, llm_chain2=llm_chain2,llm=llm,config=cfg,**kwargs)
+        return cls(llm_chain=llm_chain, llm_chain2=llm_chain2,llm=llm,config=cfg,verbose=True,**kwargs)
 
 
 def run_knowledge_qa(query:str):
