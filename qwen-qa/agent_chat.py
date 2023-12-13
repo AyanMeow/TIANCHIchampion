@@ -40,21 +40,12 @@ Action:
 >>>>
 
 注意,你必须时刻按照示例来进行每一步的思考,并在必要的时候使用工具。
-特别重要的：你的输出必须严格按照以下格式：
-Question:
-Thought:
-Action:
-```
-$JSON_BLOB
-```
-Observation:
-....
-
 现在,让我们开始作答。
 
 history: {history}
 Question: {input}
 Thought: {agent_scratchpad}
+Action:
 """
 from langchain.agents import LLMSingleActionAgent, AgentExecutor
 from custom_template import CustomPromptTemplate,CustomOutputParser
