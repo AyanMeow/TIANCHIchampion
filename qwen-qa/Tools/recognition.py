@@ -104,7 +104,7 @@ class LLMRecChain(LLMChain):
             **kwargs: Any,
         ):
             llm_chain = LLMChain(llm=llm, prompt=prompt)
-            return cls(llm_chain=llm_chain,llm=llm,config=cfg,verbose=True,verbose=True,**kwargs)
+            return cls(llm_chain=llm_chain,llm=llm,config=cfg,verbose=True,**kwargs)
         
         
 def run_recognition(query:str)->dict:
@@ -112,6 +112,6 @@ def run_recognition(query:str)->dict:
     ans=llmchain._call({llmchain.input_key:query})
     return ans
 
-from pydantic import BaseModel, Field
-class RecognitionInput(BaseModel):
-    question: str = Field()
+import pydantic
+class RecognitionInput(pydantic.BaseModel):
+    question: str = pydantic.Field()
