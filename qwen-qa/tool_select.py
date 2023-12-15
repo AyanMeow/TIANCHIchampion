@@ -10,7 +10,7 @@ tools = [
     Tool.from_function(
     func=run_recognition,
     name="IntentRecognition",
-    description="你应该**首先**使用这个工具分析用户问题的真实意图。",
+    description="你应该**首先**使用这个工具分析用户问题的真实意图。需要的输入:<用户原问题>。",
     args_schema=RecognitionInput
     ),
     Tool.from_function(
@@ -21,7 +21,7 @@ tools = [
     ),
     Tool.from_function(
         func=run_knowledge_qa,
-        name='knowledegQA',
+        name='knowledgeQA',
         description="使用这个工具来为用户的提问搜索本地文档知识库中的答案。",
         args_schema=KnowledgeSearchInput
     ),

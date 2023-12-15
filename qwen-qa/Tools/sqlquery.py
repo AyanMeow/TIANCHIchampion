@@ -153,7 +153,7 @@ class LLMSQLChain(LLMChain):
         
         final_ans = {
             self.input_key:query,
-            "SQLquery":llm_out,
+            "SQLquery":llm_out.strip(),
             self.output_key:answers
         }
         return final_ans[self.output_key]

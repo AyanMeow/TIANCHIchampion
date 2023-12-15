@@ -14,7 +14,7 @@ action的值必须是 "Final Answer"或{tool_names} 中的某一个。
 >>>>
 {{{{
     "action":$工具名称,
-    "action_input":$工具输入
+    "action_input":$工具需要的输入
 }}}}
 >>>>
 
@@ -40,12 +40,11 @@ Action:
 >>>>
 
 注意,你必须时刻按照示例的格式来进行每一步的思考,并在必要的时候使用工具。
-现在,让我们开始作答。下面的内容必须全部输出。
+现在,让我们开始作答。
 
 history: {history}
 Question: {input}
 Thought: {agent_scratchpad}
-Action:
 """
 from langchain.agents import LLMSingleActionAgent, AgentExecutor
 from custom_template import CustomPromptTemplate,CustomOutputParser

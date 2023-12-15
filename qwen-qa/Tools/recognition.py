@@ -90,7 +90,7 @@ class LLMRecChain(LLMChain):
           
         final_ans = {
             self.input_key:query,
-            self.output_key:llm_out
+            self.output_key:llm_out.strip()
         }
         
         return final_ans[self.output_key]

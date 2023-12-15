@@ -54,9 +54,9 @@ class CustomOutputParser(AgentOutputParser):
             )
         # action = parts[1].split('"action_input":')[0].strip()
         # action_input = parts[1].split('"action_input":')[1].strip()
-        action_dict = json.loads(parts[1])
+        action_dict = json.loads(parts[1].replace('`',''))
         action = action_dict['action']
-        action_input = action_dict['action_input']
+        action_input = str(action_dict['action_input'])
         try:
             ans = AgentAction(
                 tool=action,
