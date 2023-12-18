@@ -23,7 +23,8 @@ _PROMPT_TEMPLATE="""
 
 请你思考用户的要求，并按照要求，写出能够使用python的sqlite3库执行的SQL查询语句。
 你所使用的数据库的table_name、column_name等，都必须严格与提供给你的数据库信息中的table_name、column_name一致。
-table_name、column_name应被""包裹。
+table_name、column_name应被""包裹
+当你处理时间类数据时，要特别注意示例数据的样式。
 你的输出应严格按照如下示例。
 你的回答使用如下的示例：
 
@@ -50,6 +51,7 @@ _PROMPT_TEMPLATE2="""
 SQL查询语句所使用的table_name、column_name应与下面数据库中的table_name、column_name完全一致。
 table_name、column_name中包含的特殊符号等也不能省略。
 table_name、column_name应被""包裹。
+当你处理时间类数据时,要特别注意示例数据的格式,包括能否被STRFTIME函数正确处理等。
 下面是用户使用的数据库的信息:
 
 >>>>
@@ -136,7 +138,9 @@ class LLMSQLChain(LLMChain):
             error=None
             try:
                 sql_result=cursor.execute(llm_out)
-            except sqlite3.OperationalError as e:
+                if list(sql_result)[0][0] == None or len(list(sql_result)) <= 0:
+                    raise sqlite3.DataError("can't find result for question.please check other table.")
+            except Exception as e:
                 error=str(e)
                 _run_manager.on_text(text=error)
                 llm_out=self.llm_chain2.predict(

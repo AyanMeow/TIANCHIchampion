@@ -8,14 +8,14 @@ _AGENT_PROMPT_TEMPLATE="""
 
 使用$JSON_BLOB的形式来选择你要使用的工具,action用于存贮工具的名字(tool name);
 而action_input用于存贮工具的输入。
-action的值必须是 "Final Answer"或{tool_names} 中的某一个。
+action的值**必须**是 "Final Answer"或{tool_names} 中的某一个。
 每一个$JSON_BLOB中只能使用一个action,如下所示:
 
 >>>>
-{{{{
-    "action":$工具名称,
-    "action_input":$工具需要的输入
-}}}}
+{{
+    "action":$工具名称(str),
+    "action_input":$工具需要的输入(str)
+}}
 >>>>
 
 整个回答过程应如下所示例:
@@ -32,10 +32,10 @@ Observation:执行action得到的结果
 Thought:现在我有了所有回答问题所需要的东西。
 Action:
 ```
-{{{{
-    "action":"Fincal Answer",
+{{
+    "action":"Final Answer",
     "action_input":"$问题的最终答案"
-}}}}
+}}
 ```
 >>>>
 
@@ -108,4 +108,4 @@ def agent_qa(
             "history":[]
         },
         run_manager=_run_manager)
-    print(res)
+    return res['output']

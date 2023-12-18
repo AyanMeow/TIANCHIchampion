@@ -18,7 +18,7 @@ _PROMPT_TEMPLATE="""
 >>>>
 Question:用户的问题。
 Thought:用户的真实意图。
-Answer:[chat,calculate,knowledge_QA,sql_search]中的某一个。
+Answer:[chat,calculate,knowledgeQA,sqlSearch]中的某一个。
 >>>>
 
 下面是一些判断用户意图的示例：
